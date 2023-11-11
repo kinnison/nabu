@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{io::IsTerminal, net::SocketAddr};
 
 use axum::Router;
 use clap::Parser;
@@ -25,8 +25,15 @@ async fn main() {
         .with(fmt::layer())
         .with(
             EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
-                .with_env_var("MAILCONFIG_LOG")
+                .with_default_directive(
+                    if std::io::stdout().is_terminal() {
+                        LevelFilter::INFO
+                    } else {
+                        LevelFilter::ERROR
+                    }
+                    .into(),
+                )
+                .with_env_var("NABU_LOG")
                 .from_env_lossy(),
         )
         .init();
