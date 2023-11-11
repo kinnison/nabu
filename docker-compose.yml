@@ -1,0 +1,18 @@
+version: "3.9"
+services:
+  db:
+    image: postgres
+    restart: always
+    command: ["postgres", "-c", "log_statement=all", "-c", "log_destination=stderr"]
+    environment:
+      POSTGRES_DB: nabu
+      POSTGRES_USER: nabu
+      POSTGRES_PASSWORD: nabu
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - nabu-db-data:/var/lib/postgresql/data/pgdata
+    ports:
+      - "15432:5432"
+
+volumes:
+  nabu-db-data:
