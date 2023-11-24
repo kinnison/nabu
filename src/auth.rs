@@ -25,6 +25,7 @@ impl Authentication {
         &self.identity
     }
 
+    #[allow(unused)]
     pub fn token(&self) -> &Token {
         &self.token
     }

@@ -1,5 +1,4 @@
 use axum::response::Response;
-use axum::routing::any;
 use axum::Json;
 use axum::{body::Bytes, http::StatusCode, response::IntoResponse, routing::put, Router};
 use bytes::Buf;
@@ -127,12 +126,12 @@ async fn publish_crate(
 
     let krate = Krate::by_name_or_new(&mut db, &entry.name, auth.identity()).await?;
 
-    let vers = krate.new_version(&mut db, &entry).await?;
+    let _vers = krate.new_version(&mut db, &entry).await?;
 
     // At some point return any warnings
     Ok(Json(PublishResponse::default()))
 }
 
-pub fn router(state: &AppState) -> Router<AppState> {
+pub fn router(_state: &AppState) -> Router<AppState> {
     Router::new().route("/v1/crates/new", put(publish_crate))
 }

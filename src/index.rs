@@ -33,6 +33,6 @@ async fn config_json(State(config): State<Configuration>) -> Json<ConfigJson> {
     })
 }
 
-pub fn router(state: &AppState) -> Router<AppState> {
+pub fn router(_state: &AppState) -> Router<AppState> {
     Router::new().route("/config.json", get(config_json))
 }

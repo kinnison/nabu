@@ -1,12 +1,6 @@
 use std::{io::IsTerminal, net::SocketAddr};
 
-use axum::{
-    extract::DefaultBodyLimit,
-    http::{Request, Uri},
-    middleware::{self, Next},
-    response::Response,
-    Router,
-};
+use axum::{extract::DefaultBodyLimit, Router};
 use clap::Parser;
 use database::{apply_migrations, create_pool, AsyncPgConnection, Pool};
 use tower_http::{
@@ -70,34 +64,6 @@ async fn main() {
         None | Some(cli::Cmd::Serve) => serve(config, pool).await,
         Some(cli::Cmd::User(usercmd)) => user(pool, usercmd).await,
     }
-}
-
-async fn tidy_url<B>(request: Request<B>, next: Next<B>) -> Response {
-    let (mut parts, body) = request.into_parts();
-
-    if parts.uri.path().contains("//") {
-        // We know there's a path so...
-        let mut builder = Uri::builder();
-        if let Some(scheme) = parts.uri.scheme() {
-            builder = builder.scheme(scheme.clone());
-        }
-        if let Some(auth) = parts.uri.authority() {
-            builder = builder.authority(auth.clone());
-        }
-        if let Some(pandq) = parts.uri.path_and_query() {
-            let path = pandq.path();
-            let path = path.replace("//", "/");
-            if let Some(query) = pandq.query() {
-                builder = builder.path_and_query(format!("{path}?{query}"));
-            } else {
-                builder = builder.path_and_query(path);
-            }
-        }
-        parts.uri = builder.build().expect("Unable to reconstruct URI");
-    }
-
-    let request = Request::from_parts(parts, body);
-    next.run(request).await
 }
 
 async fn serve(config: Configuration, pool: Pool) {
