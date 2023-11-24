@@ -1,6 +1,18 @@
-use clap::Parser;
+use clap::{
+    builder::{styling::AnsiColor, Styles},
+    Parser,
+};
+
+const CLI_STYLE: Styles = Styles::styled()
+    .header(AnsiColor::Yellow.on_default())
+    .usage(AnsiColor::Green.on_default())
+    .literal(AnsiColor::Green.on_default())
+    .placeholder(AnsiColor::Green.on_default());
 
 #[derive(Debug, Parser)]
+#[command(name = "nabu", about = "A simple cargo HTTP registry")]
+#[command(version)]
+#[command(styles = CLI_STYLE)]
 pub struct Cli {
     #[clap(subcommand)]
     pub command: Option<Cmd>,
