@@ -4,6 +4,7 @@ use axum::{extract::DefaultBodyLimit, Router};
 use clap::Parser;
 use database::{apply_migrations, create_pool, AsyncPgConnection, Pool};
 use tower_http::{
+    services::ServeDir,
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
     LatencyUnit,
 };
@@ -69,9 +70,11 @@ async fn main() {
 async fn serve(config: Configuration, pool: Pool) {
     let port = config.port();
     let state = AppState::new(config, pool);
+    let dlserver = ServeDir::new(state.config().crate_path());
     let app = Router::new()
         .nest("/crates", index::router(&state))
         .nest("/api", api::router(&state))
+        .nest_service("/download", dlserver)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::new().level(Level::INFO))

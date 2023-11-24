@@ -225,4 +225,19 @@ impl Krate {
             .flat_map(|ver| Version::parse(&ver).ok())
             .any(move |ver| req.matches(&ver)))
     }
+
+    pub async fn versions(&self, db: &mut AsyncPgConnection) -> QueryResult<Vec<KrateVer>> {
+        use crate::schema::kratever::dsl;
+        dsl::kratever
+            .filter(dsl::krate.eq(self.id))
+            .order_by(dsl::id.asc())
+            .get_results(db)
+            .await
+    }
+}
+
+impl KrateVer {
+    pub fn index_line(&self) -> String {
+        serde_json::to_string(&self.metadata).expect("Unable to re-serialise valid JSON")
+    }
 }

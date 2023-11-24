@@ -12,4 +12,8 @@ impl AppState {
     pub fn new(config: Configuration, pool: database::Pool) -> Self {
         Self { config, pool }
     }
+
+    pub fn config(&self) -> &Configuration {
+        &self.config
+    }
 }
