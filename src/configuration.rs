@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use config::{Config, ConfigError, Environment};
 use git_testament::git_testament;
@@ -13,6 +16,7 @@ pub struct ConfigurationInner {
     #[serde(default = "String::new")]
     version: String,
     base_url: Url,
+    crate_path: PathBuf,
 }
 
 fn default_port() -> u16 {
@@ -54,6 +58,11 @@ impl ConfigurationInner {
     pub fn base_url(&self) -> &Url {
         &self.base_url
     }
+
+    /// The crates path
+    pub fn crate_path(&self) -> &Path {
+        &self.crate_path
+    }
 }
 
 impl Configuration {
@@ -62,6 +71,8 @@ impl Configuration {
         let config = Config::builder().add_source(Environment::default().try_parsing(true));
         let mut inner: ConfigurationInner = config.build()?.try_deserialize()?;
         inner.version = format!("{VERSION}");
+        inner.crate_path = std::fs::canonicalize(inner.crate_path)
+            .map_err(|e| ConfigError::Foreign(Box::new(e)))?;
         Ok(Self {
             inner: Arc::new(inner),
         })

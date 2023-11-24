@@ -1,3 +1,6 @@
+use std::path::{Path, PathBuf};
+
+use axum::extract::State;
 use axum::response::Response;
 use axum::Json;
 use axum::{body::Bytes, http::StatusCode, response::IntoResponse, routing::put, Router};
@@ -9,6 +12,7 @@ use serde::Serialize;
 use thiserror::Error;
 use tracing::info;
 
+use crate::configuration::Configuration;
 use crate::{auth::Authentication, state::AppState};
 
 #[derive(Debug, Error)]
@@ -23,6 +27,8 @@ enum PublishError {
     Deserialise(#[from] serde_path_to_error::Error<serde_json::Error>),
     #[error("Some dependencies unmet: {0:?}")]
     UnmetDeps(Vec<String>),
+    #[error("IO error storing crate: {0}")]
+    IO(#[from] std::io::Error),
 }
 
 #[derive(Serialize)]
@@ -38,6 +44,7 @@ impl IntoResponse for PublishError {
             Self::BadMetadataLength(_) => StatusCode::BAD_REQUEST,
             Self::Deserialise(_) => StatusCode::BAD_REQUEST,
             Self::UnmetDeps(_) => StatusCode::BAD_REQUEST,
+            Self::IO(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         let msg = self.to_string();
         (code, Json(GenericError { error: msg })).into_response()
@@ -56,9 +63,32 @@ struct PublishWarnings {
     other: Vec<String>,
 }
 
+fn make_crate_filename(base: &Path, krate: &str, version: &str) -> std::io::Result<PathBuf> {
+    let container = match krate.len() {
+        0 => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "empty crate name",
+            ))
+        }
+        1 => "1".to_string(),
+        2 => "2".to_string(),
+        3 => format!("3/{}", krate.chars().next().unwrap()),
+        _ => {
+            let chars: Vec<char> = krate.chars().take(4).collect();
+            format!("{}{}/{}{}", chars[0], chars[1], chars[2], chars[3])
+        }
+    };
+    let mut dir_to_make = base.join(container);
+    std::fs::create_dir_all(&dir_to_make)?;
+    dir_to_make.push(format!("{krate}-{version}.crate"));
+    Ok(dir_to_make)
+}
+
 async fn publish_crate(
     mut db: Connection,
     auth: Authentication,
+    State(config): State<Configuration>,
     mut body: Bytes,
 ) -> Result<Json<PublishResponse>, PublishError> {
     info!("Begin publish flow...");
@@ -122,7 +152,10 @@ async fn publish_crate(
     }
 
     // At this point we can be happy that the upload is good
-    // TODO: Store the .crate into some backing store
+
+    let crate_filename = make_crate_filename(config.crate_path(), &entry.name, &entry.vers)?;
+
+    tokio::fs::write(crate_filename, body).await?;
 
     let krate = Krate::by_name_or_new(&mut db, &entry.name, auth.identity()).await?;
 
