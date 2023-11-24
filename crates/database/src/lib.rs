@@ -13,6 +13,7 @@ mod schema;
 
 pub mod models;
 
+pub use diesel::result::Error as DieselError;
 pub use diesel_async::AsyncPgConnection;
 
 pub fn apply_migrations(db_url: &str) -> diesel::migration::Result<()> {

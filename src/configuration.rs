@@ -12,6 +12,7 @@ pub struct ConfigurationInner {
     database_url: Url,
     #[serde(default = "String::new")]
     version: String,
+    base_url: Url,
 }
 
 fn default_port() -> u16 {
@@ -47,6 +48,11 @@ impl ConfigurationInner {
     /// The version of this program
     pub fn version(&self) -> &str {
         &self.version
+    }
+
+    /// The base URL of the registry
+    pub fn base_url(&self) -> &Url {
+        &self.base_url
     }
 }
 

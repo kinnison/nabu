@@ -1,6 +1,12 @@
 use std::{io::IsTerminal, net::SocketAddr};
 
-use axum::Router;
+use axum::{
+    extract::DefaultBodyLimit,
+    http::{Request, Uri},
+    middleware::{self, Next},
+    response::Response,
+    Router,
+};
 use clap::Parser;
 use database::{apply_migrations, create_pool, AsyncPgConnection, Pool};
 use tower_http::{
@@ -11,8 +17,10 @@ use tracing::{info, warn, Level};
 use tracing_subscriber::{filter::LevelFilter, fmt, prelude::*, EnvFilter};
 
 mod api;
+mod auth;
 mod cli;
 mod configuration;
+mod index;
 mod state;
 
 use cli::Cli;
@@ -64,18 +72,50 @@ async fn main() {
     }
 }
 
+async fn tidy_url<B>(request: Request<B>, next: Next<B>) -> Response {
+    let (mut parts, body) = request.into_parts();
+
+    if parts.uri.path().contains("//") {
+        // We know there's a path so...
+        let mut builder = Uri::builder();
+        if let Some(scheme) = parts.uri.scheme() {
+            builder = builder.scheme(scheme.clone());
+        }
+        if let Some(auth) = parts.uri.authority() {
+            builder = builder.authority(auth.clone());
+        }
+        if let Some(pandq) = parts.uri.path_and_query() {
+            let path = pandq.path();
+            let path = path.replace("//", "/");
+            if let Some(query) = pandq.query() {
+                builder = builder.path_and_query(format!("{path}?{query}"));
+            } else {
+                builder = builder.path_and_query(path);
+            }
+        }
+        parts.uri = builder.build().expect("Unable to reconstruct URI");
+    }
+
+    let request = Request::from_parts(parts, body);
+    next.run(request).await
+}
+
 async fn serve(config: Configuration, pool: Pool) {
     let port = config.port();
     let state = AppState::new(config, pool);
-    let app = Router::new().nest("/api", api::router(&state)).layer(
-        TraceLayer::new_for_http()
-            .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
-            .on_response(
-                DefaultOnResponse::new()
-                    .level(Level::INFO)
-                    .latency_unit(LatencyUnit::Millis),
-            ),
-    );
+    let app = Router::new()
+        .nest("/crates", index::router(&state))
+        .nest("/api", api::router(&state))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .on_response(
+                    DefaultOnResponse::new()
+                        .level(Level::INFO)
+                        .latency_unit(LatencyUnit::Millis),
+                ),
+        )
+        .layer(DefaultBodyLimit::max(20 * 1024 * 1024));
     let app = app.with_state(state);
     let addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
     info!("Starting server on {addr}...");
@@ -128,6 +168,7 @@ async fn createuser(conn: &mut AsyncPgConnection, name: &str, admin: bool) {
 async fn listtokens(conn: &mut AsyncPgConnection, name: &str) {
     let user = database::models::Identity::by_name(conn, name)
         .await
+        .expect("Unable to query for user")
         .expect("Unable to find user");
     let tokens = user
         .tokens(conn)
@@ -142,6 +183,7 @@ async fn listtokens(conn: &mut AsyncPgConnection, name: &str) {
 async fn newtoken(conn: &mut AsyncPgConnection, name: &str, title: &str) {
     let user = database::models::Identity::by_name(conn, name)
         .await
+        .expect("Unable to query for user")
         .expect("Unable to find user");
     let token = user
         .new_token(conn, title)
@@ -153,6 +195,7 @@ async fn newtoken(conn: &mut AsyncPgConnection, name: &str, title: &str) {
 async fn deletetoken(conn: &mut AsyncPgConnection, name: &str, token: &str) {
     let user = database::models::Identity::by_name(conn, name)
         .await
+        .expect("Unable to query for user")
         .expect("Unable to find user");
     if user
         .delete_token(conn, token)
